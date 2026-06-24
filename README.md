@@ -1,8 +1,10 @@
 # Meridian Emulation
 
-ATT&CK technique emulation and detection validation pipeline, integrating the
-[Atomic Red Team](https://github.com/redcanaryco/atomic-red-team) library with
-the Meridian Risk Scoring API and CyberGraph-AD for closed-loop purple team validation.
+ATT&CK technique emulation and detection validation pipeline with two integration paths:
+[Atomic Red Team](https://github.com/redcanaryco/atomic-red-team) for host-based execution
+and [MITRE Caldera](https://github.com/apache/caldera) for agent-based adversary emulation.
+Both pull technique priorities from the Meridian Risk Scoring API and validate against
+CyberGraph-AD for closed-loop purple team coverage analysis.
 
 ## What it does
 
@@ -14,21 +16,21 @@ intelligence says you're exposed to?*
 Meridian /controls/gaps
         │  Techniques with no active mitigation
         ▼
-Technique Selector
-        │  Maps gap techniques → Atomic Red Team tests
-        │  Expands base IDs to subtechniques (T1110 → T1110.001, .003, .004)
-        ▼
-Emulation Runner
-        │  Dry-run: execution plan with resolved commands
-        │  Live:    subprocess execution with cleanup
-        ▼
-Detection Validator
-        │  Checks CyberGraph-AD findings for matching anomaly types
-        ▼
-Coverage Report
-        │  Matrix: technique × detected/missed
-        │  Gap analysis: undetected control gap techniques
-        └─ Recommendations: threshold tuning + Meridian control creation
+┌───────────────────────┬──────────────────────────┐
+│  Atomic Red Team path │  Caldera path            │
+│                       │                          │
+│  Technique Selector   │  caldera_client.py       │
+│  ↓                    │  ↓                       │
+│  Emulation Runner     │  Adversary profile →     │
+│  (subprocess)         │  Caldera REST API        │
+│  ↓                    │  ↓                       │
+│  Detection Validator  │  Operation results       │
+└───────────┬───────────┴──────────────────────────┘
+            │
+            ▼
+       Coverage Report
+       Matrix: technique × detected/missed
+       Gap analysis + recommendations
 ```
 
 ## Portfolio context
@@ -75,13 +77,15 @@ python run.py --mode run --live --confirm
 | `plan` | Dry-run: generate execution plan without running anything (safe default) |
 | `run` | Execute atomic tests; dry-run unless `--live --confirm` provided |
 | `full` | Full pipeline: plan or run + validate + report |
+| `caldera` | Generate Caldera adversary profile YAML from Meridian gaps (Scope A) |
+| `caldera-push` | Push profile to running Caldera instance and optionally launch operation (Scope B) |
 
 ## CLI reference
 
 ```
-python run.py [--mode {plan,run,full,catalog}]
+python run.py [--mode {plan,run,full,catalog,caldera,caldera-push}]
               [--techniques T1110 T1078 ...]   # specific technique IDs
-              [--platform windows|linux|macos]  # filter atomic tests by OS
+              [--platform windows|linux|macos]  # filter tests by OS
               [--max-techniques N]              # cap selection (default: 20)
               [--all-techniques]                # include non-AI-relevant techniques
               [--live]                          # enable live execution
@@ -89,6 +93,79 @@ python run.py [--mode {plan,run,full,catalog}]
               [--validation-window N]           # minutes to look back for findings
               [--output-dir PATH]               # results output directory
               [--refresh]                       # force refresh of atomic catalog
+              [--caldera-url URL]               # Caldera server URL (default: http://localhost:8888)
+              [--caldera-key KEY]               # Caldera API key
+              [--agent-group GROUP]             # Caldera agent group (default: red)
+              [--profile-name NAME]             # name for generated adversary profile
+              [--write]                         # write profile YAML to disk (caldera mode)
+              [--split-by-tactic]               # one profile per tactic (caldera mode)
+```
+
+## Caldera integration
+
+### Scope A — Profile generator (no running Caldera required)
+
+Generates Caldera-compatible adversary profile YAMLs from Meridian control gaps.
+Profiles can be loaded manually by dropping them into `caldera/data/adversaries/`.
+
+```bash
+# Dry-run — show what would be generated
+python run.py --mode caldera --techniques T1057 T1082 T1021.002 T1113
+
+# Write YAML to disk
+python run.py --mode caldera --techniques T1057 T1082 T1021.002 T1113 \
+  --write --output-dir data/caldera_profiles
+```
+
+### Scope B — API client (requires running Caldera)
+
+Programmatically pushes profiles to a running Caldera instance and optionally
+launches operations against deployed agents.
+
+```bash
+# Extract credentials from Docker logs
+python caldera_creds.py
+
+# Push profile to Caldera (dry-run — creates profile, no operation launched)
+python run.py --mode caldera-push \
+  --techniques T1057 T1082 T1021.002 T1113 \
+  --caldera-key <api_key>
+
+# Launch operation against agents (requires deployed Sandcat agent)
+python run.py --mode caldera-push \
+  --techniques T1057 T1082 T1021.002 T1113 \
+  --caldera-key <api_key> \
+  --live
+```
+
+The client discovers real ability IDs from the live Caldera instance rather than
+using a static mapping, ensuring generated profiles reference abilities that
+actually exist.
+
+### Caldera setup (Docker)
+
+```bash
+git clone https://github.com/apache/caldera.git --recursive
+cd caldera
+
+# Patch Dockerfile line 83: add || true to skip emu payload failures
+# RUN cd /usr/src/app/plugins/emu; ./download_payloads.sh || true
+
+docker build --build-arg VARIANT=slim -t caldera .
+docker run -d --name caldera -p 8888:8888 caldera
+
+# Retrieve generated credentials
+python caldera_creds.py
+```
+
+### Credential management
+
+Caldera generates random credentials on first run. Use `caldera_creds.py` to
+retrieve them after any container restart:
+
+```bash
+python caldera_creds.py           # print credentials
+python caldera_creds.py --save    # save to caldera_creds.json (gitignored)
 ```
 
 ## Technique selection
@@ -103,8 +180,6 @@ Base technique IDs are automatically expanded to subtechniques:
 `T1110` → `T1110.001` (Password Guessing), `T1110.003` (Password Spraying), `T1110.004` (Credential Stuffing)
 
 ## Atomic Red Team integration
-
-Atomic Red Team is a library of tests mapped to the MITRE ATT&CK framework that security teams can use to quickly, portably, and reproducibly test their environments.
 
 - 697 techniques available across Windows, Linux, and macOS
 - 91 pre-filtered as AI/ML infrastructure relevant
@@ -124,64 +199,43 @@ After execution, the validator checks CyberGraph-AD findings for matching anomal
 | T1078 (Valid Accounts) | `privilege_escalation` |
 | T1133 (External Remote Services) | `off_hours_access` |
 
-## Coverage report
-
-The report includes:
-
-- **Coverage matrix** — each technique with detected/missed/would_test status
-- **Gap analysis** — techniques executed but not detected, prioritized by control gap status
-- **Recommendations** — threshold tuning targets, Meridian control creation suggestions
-
-```json
-{
-  "executive_summary": {
-    "total_techniques_selected": 20,
-    "control_gap_techniques": 5,
-    "total_atomic_tests": 196,
-    "detection_rate": 0.6,
-    "gap_detection_rate": 0.4
-  },
-  "gap_analysis": {
-    "missed_techniques": [
-      {
-        "technique_id": "T1110.003",
-        "priority": "CRITICAL",
-        "is_control_gap": true
-      }
-    ]
-  }
-}
-```
-
 ## Safety
 
-- **Dry-run is the default** — no execution without explicit `--live` flag
-- Live execution requires both `--live` and `--confirm` to prevent accidents
-- Cleanup commands run automatically after each test in live mode
+- **Dry-run is the default** for all modes — no execution without explicit flags
+- Atomic Red Team: requires both `--live` and `--confirm` to execute
+- Caldera: requires `--live` to launch operations; profile creation is always safe
+- Cleanup commands run automatically after each atomic test in live mode
 - Serial execution only — no concurrent test runs
-- Atomic cache and results are gitignored
+- Atomic cache, results, and `caldera_creds.json` are gitignored
 
 ## Roadmap
 
-- [ ] ATLAS-specific test library — custom atomics for ML attack techniques not covered by Atomic Red Team (model extraction probes, adversarial input generation, prompt injection patterns)
-- [ ] Caldera integration — adversary profile generation from Meridian control gaps
-- [ ] Meridian risk score feedback — update asset risk scores based on detection outcomes
+- [x] Atomic Red Team integration — plan, execute, validate
+- [x] Caldera Scope A — adversary profile YAML generation from Meridian gaps
+- [x] Caldera Scope B — programmatic profile push + operation launch via REST API
+- [ ] Caldera Scope C — poll operation results → coverage report feedback
+- [ ] ATLAS-specific test library — custom atomics for ML attack techniques
+- [ ] `pipeline.py` — live OCSF Transformer → CyberGraph-AD ingestion
 - [ ] HTML coverage report with ATT&CK Navigator matrix visualization
 
 ## Project structure
 
 ```
 meridian-emulation/
+├── caldera/
+│   ├── caldera_profile_generator.py  # Scope A: YAML profile generation
+│   └── caldera_client.py             # Scope B: REST API client
 ├── catalog/
-│   └── atomic_catalog.py      # Fetch + cache Atomic Red Team YAMLs
+│   └── atomic_catalog.py             # Fetch + cache Atomic Red Team YAMLs
 ├── selector/
-│   └── technique_selector.py  # Map Meridian gaps → Atomic test IDs
+│   └── technique_selector.py         # Map Meridian gaps → Atomic test IDs
 ├── runner/
-│   └── emulation_runner.py    # Dry-run + live execution
+│   └── emulation_runner.py           # Dry-run + live execution
 ├── validator/
-│   └── detection_validator.py # Check CyberGraph-AD findings
+│   └── detection_validator.py        # Check CyberGraph-AD findings
 ├── report/
-│   └── coverage_report.py     # Coverage matrix + gap report
+│   └── coverage_report.py            # Coverage matrix + gap report
+├── caldera_creds.py                  # Extract Caldera credentials from Docker logs
 ├── config.py
 ├── run.py
 └── requirements.txt
