@@ -1,2 +1,6 @@
 
 .venv/
+
+caldera_creds.json
+
+caldera/__pycache__/
