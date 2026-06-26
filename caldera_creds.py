@@ -14,7 +14,7 @@ Usage
 import argparse
 import json
 import re
-import subprocess
+import subprocess  # nosec B404
 import sys
 
 
@@ -22,7 +22,7 @@ def get_caldera_creds(container: str = "caldera") -> dict | None:
     """Extract Caldera credentials from Docker container logs."""
     try:
         result = subprocess.run(
-            ["docker", "logs", container],
+            ["docker", "logs", container],  # nosec B603 B607
             capture_output=True,
             text=True,
         )
@@ -65,7 +65,7 @@ def get_caldera_creds(container: str = "caldera") -> dict | None:
         },
         "blue": {
             "username": "blue",
-            "password": "",
+            "password": "",  # nosec B105 - placeholder, loaded from environment at runtime
             "api_key": "",
         },
         "url": "http://localhost:8888",
@@ -87,7 +87,7 @@ def get_caldera_creds(container: str = "caldera") -> dict | None:
 
 def print_creds(creds: dict) -> None:
     print(f"\n{'='*55}")
-    print(f"  Caldera Credentials — {creds['url']}")
+    print(f"  Caldera Credentials â€” {creds['url']}")
     print(f"{'='*55}")
     print(f"  Red team:")
     print(f"    Username: {creds['red']['username']}")

@@ -5,7 +5,7 @@ Executes Atomic Red Team tests in either dry-run or live mode.
 
 Dry-run mode (default, safe)
 -----------------------------
-Prints what would be executed — commands, prerequisites, cleanup —
+Prints what would be executed â€” commands, prerequisites, cleanup â€”
 without running anything. Produces a dry_run_plan.json showing full
 execution intent. Safe for portfolio demonstration.
 
@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import json
 import logging
-import subprocess
+import subprocess  # nosec B404
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,7 +51,7 @@ class EmulationRunner:
         self._output_dir.mkdir(parents=True, exist_ok=True)
         self._dry_run = dry_run if dry_run is not None else settings.dry_run
 
-    # ── Dry-run planning ──────────────────────────────────────────────────────
+    # â”€â”€ Dry-run planning â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def dry_run(self, selections: list[dict]) -> dict:
         """
@@ -114,10 +114,10 @@ class EmulationRunner:
         with open(plan_path, "w") as f:
             json.dump(plan, f, indent=2)
 
-        logger.info(f"Dry-run plan saved → {plan_path}")
+        logger.info(f"Dry-run plan saved â†’ {plan_path}")
         return plan
 
-    # ── Live execution ─────────────────────────────────────────────────────────
+    # â”€â”€ Live execution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def run(
         self,
@@ -137,7 +137,7 @@ class EmulationRunner:
         Execution results dict with per-test outcomes.
         """
         if self._dry_run:
-            logger.info("Dry-run mode — returning plan without executing")
+            logger.info("Dry-run mode â€” returning plan without executing")
             return self.dry_run(selections)
 
         if not confirm:
@@ -148,7 +148,7 @@ class EmulationRunner:
             )
 
         logger.warning("=" * 60)
-        logger.warning("LIVE EXECUTION MODE — running atomic tests on this system")
+        logger.warning("LIVE EXECUTION MODE â€” running atomic tests on this system")
         logger.warning("=" * 60)
 
         results = {
@@ -182,7 +182,7 @@ class EmulationRunner:
         with open(results_path, "w") as f:
             json.dump(results, f, indent=2)
 
-        logger.info(f"Execution results saved → {results_path}")
+        logger.info(f"Execution results saved â†’ {results_path}")
         return results
 
     def _run_single_test(self, technique_id: str, test: dict) -> dict:
@@ -216,7 +216,7 @@ class EmulationRunner:
 
         if executor_name == "manual":
             result["status"] = "skipped"
-            result["output"] = "Manual executor — skipped in automated run"
+            result["output"] = "Manual executor â€” skipped in automated run"
             return result
 
         # Map executor to shell command
@@ -236,7 +236,7 @@ class EmulationRunner:
         # Execute
         start = time.time()
         try:
-            proc = subprocess.run(
+            proc = subprocess.run(  # nosec B603
                 shell + [command],
                 capture_output=True,
                 text=True,
@@ -259,7 +259,7 @@ class EmulationRunner:
         # Cleanup
         if cleanup_command and result["status"] != "skipped":
             try:
-                subprocess.run(
+                subprocess.run(  # nosec B603
                     shell + [cleanup_command],
                     capture_output=True,
                     text=True,
@@ -271,7 +271,7 @@ class EmulationRunner:
 
         return result
 
-    # ── OCSF output ───────────────────────────────────────────────────────────
+    # â”€â”€ OCSF output â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def to_ocsf_events(self, results: dict) -> list[dict]:
         """

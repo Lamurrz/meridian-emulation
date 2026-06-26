@@ -63,9 +63,9 @@ class AtomicCatalog:
         self._cache_dir = Path(cache_dir or settings.atomic_cache_dir)
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._index: dict[str, Any] = {}
-        self._loaded: dict[str, dict] = {}  # technique_id → atomic YAML
+        self._loaded: dict[str, dict] = {}  # technique_id â†’ atomic YAML
 
-    # ── Index management ──────────────────────────────────────────────────────
+    # â”€â”€ Index management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def load_index(self, force_refresh: bool = False) -> dict[str, Any]:
         """
@@ -89,7 +89,7 @@ class AtomicCatalog:
             self._index = yaml.safe_load(resp.text) or {}
             logger.info(f"Index loaded: {len(self._index)} entries")
         except Exception as exc:
-            logger.warning(f"Failed to fetch index: {exc} — using cache if available")
+            logger.warning(f"Failed to fetch index: {exc} â€” using cache if available")
             if index_cache.exists():
                 with open(index_cache, encoding="utf-8") as f:
                     self._index = yaml.safe_load(f) or {}
@@ -112,7 +112,7 @@ class AtomicCatalog:
                 tids.append(key)
         return list(set(tids))
 
-    # ── Atomic test fetching ──────────────────────────────────────────────────
+    # â”€â”€ Atomic test fetching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def get_atomic(self, technique_id: str, force_refresh: bool = False) -> dict | None:
         """
@@ -132,8 +132,8 @@ class AtomicCatalog:
                     data = yaml.safe_load(f)
                 self._loaded[technique_id] = data
                 return data
-            except Exception:
-                pass
+            except Exception as e:
+                    logging.warning("Failed to parse atomic catalog entry: %s", e)
 
         # Fetch from GitHub
         url = f"{ATOMIC_BASE}/{technique_id}/{technique_id}.yaml"
@@ -159,7 +159,7 @@ class AtomicCatalog:
         Fetch atomics for a list of technique IDs.
         Optionally filter to tests that support a specific platform.
 
-        Returns dict of technique_id → atomic YAML (only those with tests).
+        Returns dict of technique_id â†’ atomic YAML (only those with tests).
         """
         platform = platform or settings.execution_platform
         results = {}
@@ -186,7 +186,7 @@ class AtomicCatalog:
                     f"({len(technique_ids) - len(results)} have no tests on {platform})")
         return results
 
-    # ── Technique metadata ────────────────────────────────────────────────────
+    # â”€â”€ Technique metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def technique_summary(self, technique_id: str) -> dict | None:
         """Return a summary of available atomic tests for a technique."""
@@ -243,7 +243,7 @@ class AtomicCatalog:
             if any(tid.startswith(prefix) for prefix in AI_RELEVANT_PREFIXES)
         ]
 
-    # ── Cache helpers ─────────────────────────────────────────────────────────
+    # â”€â”€ Cache helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _is_cache_fresh(self, path: Path) -> bool:
         """Return True if the cached file exists and is within the TTL."""
